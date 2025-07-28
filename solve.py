@@ -68,3 +68,12 @@ if __name__ == "__main__":
         if os.path.isfile(file_path):
             if(file_path.endswith(".pddl")):
                 os.remove(file_path)
+
+            # Merge all plans into one file
+            elif(file_path.endswith("_plan.txt")):
+                with open(os.path.join(args.folder_path, "plans.txt"), "a") as f:
+                    with open(file_path, "r") as plan_file:
+                        f.write(plan_file.read() + "\n")
+                os.remove(file_path)
+
+    os.rmdir(temp_folder)
