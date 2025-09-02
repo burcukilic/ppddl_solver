@@ -1,3 +1,5 @@
+Needs a built downward  
+
 Add domain.pddl and problem.pddl in a folder  
 
 Run with:  
