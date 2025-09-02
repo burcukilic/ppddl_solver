@@ -170,12 +170,11 @@ def replace_probabilistic_with_sampled_effect(full_action_block, seed=None):
     )
     return new_action_block
 
-def determinize_domain(domain_str, seed=None):
+def determinize_domain(action_blocks, domain_str, seed=None):
     """
     Processes the full domain string, replacing all probabilistic effects with sampled deterministic effects.
     """
     new_domain = domain_str
-    action_blocks = extract_actions(domain_str)
 
     for action_name, full_block in action_blocks:
         if ":effect" in full_block and "probabilistic" in full_block:

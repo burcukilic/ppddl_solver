@@ -1,4 +1,4 @@
-from parse import determinize_domain
+from parse import determinize_domain, extract_actions
 import argparse
 import os
 import subprocess
@@ -9,6 +9,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Determinize PPDDL domain by sampling probabilistic effects.")
     parser.add_argument("-f", "--folder_path", type=str, required=True, help="Path to the folder that includes domain.pddl")
     parser.add_argument("-s", "--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("-i", "--plan_index", type=str, default="0", help="Index for the output plan file")
     args = parser.parse_args()
 
     domain_file_path = os.path.join(args.folder_path, "domain.pddl")
@@ -19,18 +20,23 @@ if __name__ == "__main__":
     with open(domain_file_path, 'r') as file:
         content = file.read()
 
+    print("Starting the determinization and planning process...")
 
     plan_results = ""
-    success = 0
+    success = 0 
     fail = 0
 
-    for i in tqdm(range(100), desc="Processing domains"):
-        tqdm.write(f"success: {success}, fail: {fail}")
+    content = content.replace(" :probabilistic-effects", "")
+
+    action_blocks = extract_actions(content)
+
+    for i in tqdm(range(10), desc="Processing domains"):
+        #tqdm.write(f"success: {success}, fail: {fail}")
 
         for t in range(10):
-            content = content.replace(" :probabilistic-effects", "")
+            
             # Replace probabilistic effects with sampled ones
-            determinized_content = determinize_domain(content, seed=args.seed + i * 100 + t)
+            determinized_content = determinize_domain(action_blocks, content, seed=args.seed + i * 100 + t)
 
             # Save to temp folder
             temp_folder = os.path.join(args.folder_path, "temp")
@@ -43,7 +49,9 @@ if __name__ == "__main__":
             #print(f"Determinized domain written to: {output_path}")
 
             try:
-                subprocess.run(["./downward/fast-downward.py",
+                # get the path of this script
+                current_path = os.path.dirname(os.path.abspath(__file__))
+                subprocess.run([os.path.join(current_path, "./downward/fast-downward.py"),
                                 f"{args.folder_path}/temp/domain_temp.pddl",
                                 f"{args.folder_path}/problem.pddl",
                                 "--search", "astar(blind())"],
@@ -73,7 +81,7 @@ if __name__ == "__main__":
 
 
             except subprocess.TimeoutExpired:
-                tqdm.write(f"Timeout expired for {i}")
+                #tqdm.write(f"Timeout expired for {i}")
                 plan_results += f"Timeout expired for {i}\n"
                 continue
 
@@ -86,7 +94,7 @@ if __name__ == "__main__":
                 os.remove(file_path)
 
     # merge all plan_results to plans.txt
-    with open(os.path.join(args.folder_path, "plans.txt"), "w") as f:
+    with open(os.path.join(args.folder_path, f"plans_{args.plan_index}.txt"), "w") as f:
         f.write(plan_results)
 
     # remove everything in temp folder and the folder itself
@@ -95,3 +103,5 @@ if __name__ == "__main__":
         if os.path.isfile(file_path):
             os.remove(file_path)
     os.rmdir(temp_folder)
+
+    print(f"Success: {success}, Fail: {fail}.")
