@@ -2,6 +2,7 @@ from parse import determinize_domain
 import argparse
 import os
 import subprocess
+from tqdm import tqdm
 
 if __name__ == "__main__":
 
@@ -18,48 +19,63 @@ if __name__ == "__main__":
     with open(domain_file_path, 'r') as file:
         content = file.read()
 
-    for i in range(100):
+
+    plan_results = ""
+    success = 0
+    fail = 0
+
+    for i in tqdm(range(100), desc="Processing domains"):
+        tqdm.write(f"success: {success}, fail: {fail}")
+
         for t in range(10):
             content = content.replace(" :probabilistic-effects", "")
             # Replace probabilistic effects with sampled ones
-            determinized_content = determinize_domain(content, seed=args.seed + i*13)
+            determinized_content = determinize_domain(content, seed=args.seed + i * 100 + t)
 
             # Save to temp folder
             temp_folder = os.path.join(args.folder_path, "temp")
             os.makedirs(temp_folder, exist_ok=True)
-            output_path = os.path.join(temp_folder, f"domain_{i}.pddl")
+            output_path = os.path.join(temp_folder, f"domain_temp.pddl")
 
             with open(output_path, 'w') as outfile:
                 outfile.write(determinized_content)
 
-            print(f"Determinized domain written to: {output_path}")
+            #print(f"Determinized domain written to: {output_path}")
 
             try:
                 subprocess.run(["./downward/fast-downward.py",
-                                f"{args.folder_path}/temp/domain_{i}.pddl",
+                                f"{args.folder_path}/temp/domain_temp.pddl",
                                 f"{args.folder_path}/problem.pddl",
                                 "--search", "astar(blind())"],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=100)
                 
                 # check for a sas_plan in the cwd
                 if os.path.isfile(f"sas_plan"):
-                    print(f"Plan found for domain_{i}.pddl")
-                    # rename the sas_plan to domain_{i}_plan.txt
-                    os.rename("sas_plan", os.path.join(temp_folder, f"domain_{i}_plan.txt"))
-                    break
+                    #tqdm.write(f"Plan found for {i}")
+                    success += 1
+                    with open(f"sas_plan", "r") as plan_file:
+                        plan_content = plan_file.read()
+                        plan_results += f"Plan for domain_{i}:\n{plan_content}\n"
+                    os.remove(f"sas_plan")
 
+                    break
+                    
                 else:
                     t -= 1
+
                 if t <= 0:
-                    print(f"No plan found for domain_{i}.pddl")
-                    with open(os.path.join(temp_folder, f"domain_{i}_plan.txt"), "w") as f:
-                        f.write("No plan found")
+                    #tqdm.write(f"No plan found for {i}")
+                    plan_results += f"No plan found for {i}\n"
+                    fail += 1
+                    break
                 else:
                     continue
 
 
             except subprocess.TimeoutExpired:
-                print("Timeout", file=open(os.path.join(temp_folder, f"domain_{i}_plan.txt"), "w"))
+                tqdm.write(f"Timeout expired for {i}")
+                plan_results += f"Timeout expired for {i}\n"
+                continue
 
     # remove temp folder
     for file in os.listdir(temp_folder):
@@ -69,11 +85,13 @@ if __name__ == "__main__":
             if(file_path.endswith(".pddl")):
                 os.remove(file_path)
 
-            # Merge all plans into one file
-            elif(file_path.endswith("_plan.txt")):
-                with open(os.path.join(args.folder_path, "plans.txt"), "a") as f:
-                    with open(file_path, "r") as plan_file:
-                        f.write(plan_file.read() + "\n")
-                os.remove(file_path)
+    # merge all plan_results to plans.txt
+    with open(os.path.join(args.folder_path, "plans.txt"), "w") as f:
+        f.write(plan_results)
 
+    # remove everything in temp folder and the folder itself
+    for file in os.listdir(temp_folder):
+        file_path = os.path.join(temp_folder, file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
     os.rmdir(temp_folder)
